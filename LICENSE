@@ -1,0 +1,91 @@
+32X Game Gear Player License
+
+Copyright (c) 2026 the 32X Game Gear Player authors and contributors.
+
+This repository contains a mix of:
+
+- original 32X-specific code written for this project;
+- code ported or adapted from MEKA by Omar Cornut and contributors; and
+- code/data derived from Marat Fayzullin's Z80 core as carried into MEKA.
+
+To keep the whole source tree available under one compatible set of terms,
+the source code in this repository is made available under the following
+license terms.
+
+Permissions and conditions
+
+1. This source code is provided as-is, without any warranty, express or
+   implied. In no event shall the authors or copyright holders be liable for
+   any claim, damages, or other liability arising from the use of this
+   software.
+
+2. You may use, copy, study, modify, redistribute, and sell this software for
+   any purpose, including commercial use.
+
+3. If you distribute this software in modified form, or distribute a derived
+   work based on it, you must:
+
+   - preserve this license text;
+   - make the complete corresponding source code for the modified version
+     available under these same terms; and
+   - clearly mark your version as modified.
+
+4. You must preserve existing copyright, attribution, and provenance notices
+   already present in the source files. In particular, notices referring to
+   MEKA, Omar Cornut, and Marat Fayzullin must remain intact where they
+   already appear.
+
+5. You must not misrepresent the origin of this software. In particular, you
+   must not claim that ported MEKA or Marat Fayzullin material was originally
+   written by you.
+
+Provenance notes
+
+Based on the current audit of this repository, the following active files are
+known to contain code or data ported/adapted from MEKA and/or Marat
+Fayzullin's Z80 core:
+
+- 32x/include/sh2/gg_emu.h
+- 32x/include/sh2/gg_vdp.h
+- 32x/include/sh2/z80_opcodes.h
+- 32x/include/sh2/z80_ops.h
+- 32x/include/sh2/z80_ops_cb.h
+- 32x/include/sh2/z80_ops_ed.h
+- 32x/include/sh2/z80_ops_xcb.h
+- 32x/include/sh2/z80_ops_xx.h
+- 32x/include/sh2/z80_tables.h
+- 32x/src/sh2/gg_io.c
+- 32x/src/sh2/gg_mem.c
+- 32x/src/sh2/gg_render.c
+- 32x/src/sh2/gg_vdp.c
+- 32x/src/sh2/z80.c
+
+Most of the remaining 32X-specific runtime, rendering pipeline, audio relay,
+assembly interpreter work, and performance optimizations are original to this
+project, but they are distributed under the same terms above for simplicity
+and compatibility.
+
+Relation to upstream MEKA terms
+
+This license is intended to preserve the substance of the source terms
+documented by upstream MEKA in meka/sources.txt, namely:
+
+- no warranty;
+- reuse for any purpose; and
+- preservation of license terms plus source availability for modifications.
+
+This repository does not bundle the full MEKA project. It contains only this
+project's source tree plus ported/adapted portions noted above.
+
+Exclusions
+
+This license does not grant rights to third-party materials that may be
+present in the repository but are not owned by this project's authors,
+including for example:
+
+- commercial ROM images or game assets;
+- copied hardware manuals, scans, or other reference documentation; and
+- trademarks, logos, or brand names belonging to their respective owners.
+
+If a file carries a separate license notice, that separate notice controls for
+that file to the extent required by law.

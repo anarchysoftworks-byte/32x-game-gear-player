@@ -1,0 +1,11 @@
+{
+    "terminal.integrated.defaultProfile.linux": "WSL",
+    "terminal.integrated.profiles.linux": {
+        "WSL": {
+            "path": "/usr/bin/wsl",
+            "args": []
+        }
+    },
+    "terminal.integrated.shellIntegration.enabled": true,
+    "terminal.integrated.automationShell.linux": "/usr/bin/wsl"
+}

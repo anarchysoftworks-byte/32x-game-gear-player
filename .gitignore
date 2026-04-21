@@ -1,0 +1,13 @@
+# Ignore build outputs
+build/
+**/build/
+docs/
+samples/
+example code and builds/
+docs/sega\ documentation/
+docs/sega2fhtml/
+
+# Emulator workspace artifacts
+meka/
+smsplus-gx-master/
+Sonic The Hedgehog (Japan, USA).gg
