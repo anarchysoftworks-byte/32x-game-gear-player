@@ -161,9 +161,15 @@ uint32_t tile_lut_lo[4][256] __attribute__((aligned(16)));
 #define TILE_CACHE_ENTRIES  (GG_VRAM_SIZE / 4)  /* 4096 */
 
 /* Interleaved decode results: hi (pixels 0-3) and lo (pixels 4-7)
- * packed into a single struct so both fit in one SH-2 cache line.
- * This halves data cache misses in the tile rendering hot path.
- * (SH-2 cache line = 16 bytes; one 8-byte entry fits with room to spare.) */
+ * packed into a single struct so both fit within one SH-2 cache line.
+ * (The code treats the SH-2 D-cache line as 16 bytes; entry is 8 bytes.)
+ *
+ * Layout is cache-set friendly on purpose: the D-cache indexes sets by
+ * address bits [9:4], and an 8-byte entry stride advances the set index
+ * every other entry. Two entries therefore collide only when their
+ * indices are far apart (>= 64-128 depending on line size), never for
+ * consecutive tiles — so sequential left-to-right access keeps good
+ * spatial locality and does not thrash. */
 typedef struct { uint32_t hi; uint32_t lo; } tile_cache_t;
 tile_cache_t tile_cache[TILE_CACHE_ENTRIES] __attribute__((aligned(16)));
 
@@ -222,50 +228,23 @@ static void init_tile_lut(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Tile decode using LUT — 4 lookups + 3 ORs per half = 8 lookups     */
-/* + 6 ORs total, vs 40 shifts + 32 masks + 8 ORs in the old code    */
+/* Tile decode — done in ASSEMBLY, not here                           */
+/*                                                                     */
+/* This C helper was removed: it was dead code (no callers anywhere)   */
+/* and its "37 KB tile_cache working set" narrative did NOT apply to   */
+/* the runtime scanline loop. The cache-set analysis that resolves the */
+/* audit's thrashing concern lives next to the tile_cache definition.  */
+/*                                                                     */
+/* Runtime decode happens in two assembly paths:                       */
+/*   * Background — render_background_line() fills a 128-byte          */
+/*     tile_row_scratch buffer and render_bg_line_asm decodes it       */
+/*     straight from the read-only tile_lut_hi/lo LUTs. The entire     */
+/*     per-line working set (scratch + touched LUT rows) fits inside   */
+/*     the 4 KB SH-2 D-cache, so there are no capacity/conflict misses */
+/*     on the dominant 144-line background workload.                   */
+/*   * Sprites — render_sprites_line_asm consults tile_cache only on a */
+/*     cache miss (<= MAX_SPRITES_PER_LINE sprites per line).          */
 /* ------------------------------------------------------------------ */
-
-static inline void decode_tile_line(const uint8_t *src, uint8_t *dst)
-{
-    /* Cache index: byte offset of this tile-line in VRAM, divided by 4 */
-    uint16_t vram_off = (uint16_t)(src - gg_vram);
-    uint16_t idx = vram_off >> 2;
-    uint32_t hi, lo;
-
-    if (__builtin_expect(tile_cache_dirty[idx], 0))
-    {
-        /* Re-decode and cache */
-        hi  = tile_lut_hi[0][src[0]];
-        hi |= tile_lut_hi[1][src[1]];
-        hi |= tile_lut_hi[2][src[2]];
-        hi |= tile_lut_hi[3][src[3]];
-
-        lo  = tile_lut_lo[0][src[0]];
-        lo |= tile_lut_lo[1][src[1]];
-        lo |= tile_lut_lo[2][src[2]];
-        lo |= tile_lut_lo[3][src[3]];
-
-        tile_cache[idx].hi = hi;
-        tile_cache[idx].lo = lo;
-        tile_cache_dirty[idx] = 0;
-    }
-    else
-    {
-        hi = tile_cache[idx].hi;
-        lo = tile_cache[idx].lo;
-    }
-
-    /* Extract 8 palette indices from the packed 32-bit words */
-    dst[0] = (uint8_t)(hi >> 24);
-    dst[1] = (uint8_t)(hi >> 16);
-    dst[2] = (uint8_t)(hi >> 8);
-    dst[3] = (uint8_t)(hi);
-    dst[4] = (uint8_t)(lo >> 24);
-    dst[5] = (uint8_t)(lo >> 16);
-    dst[6] = (uint8_t)(lo >> 8);
-    dst[7] = (uint8_t)(lo);
-}
 
 /* ------------------------------------------------------------------ */
 /* Renderer init — call once at startup                                */
