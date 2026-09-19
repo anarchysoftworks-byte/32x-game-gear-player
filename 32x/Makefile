@@ -36,50 +36,53 @@ CART_SH2_OBJS = \
     build/sh2_z80_dispatch.o \
     build/sh2_render_asm.o
 
+build:
+	mkdir -p build
+
 all: cart
 
 cart: build/ggplayer.32x
 
-build/sh2_crt0_cart.o: src/sh2/crt0_cart.s build/m68k.bin
+build/sh2_crt0_cart.o: src/sh2/crt0_cart.s build/m68k.bin | build
 	$(SH2_AS) --big $< -o $@
 
-build/sh2_main.o: src/sh2/main.c
+build/sh2_main.o: src/sh2/main.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_gg_mem.o: src/sh2/gg_mem.c
+build/sh2_gg_mem.o: src/sh2/gg_mem.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_gg_mapper.o: src/sh2/gg_mapper.c
+build/sh2_gg_mapper.o: src/sh2/gg_mapper.c | build
 	$(SH2_CC) $(SH2_CFLAGS_COLD) -c $< -o $@
 
-build/sh2_gg_io.o: src/sh2/gg_io.c
+build/sh2_gg_io.o: src/sh2/gg_io.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_z80_asm.o: src/sh2/z80_asm.S
+build/sh2_z80_asm.o: src/sh2/z80_asm.S | build
 	$(SH2_CC) -m2 -mb -DPERF_DEBUG=$(PERF_DEBUG) -c $< -o $@
 
-build/sh2_z80_dispatch.o: src/sh2/z80_dispatch.c
+build/sh2_z80_dispatch.o: src/sh2/z80_dispatch.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_gg_vdp.o: src/sh2/gg_vdp.c
+build/sh2_gg_vdp.o: src/sh2/gg_vdp.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_gg_render.o: src/sh2/gg_render.c
+build/sh2_gg_render.o: src/sh2/gg_render.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_render_asm.o: src/sh2/render_asm.S
+build/sh2_render_asm.o: src/sh2/render_asm.S | build
 	$(SH2_CC) -m2 -mb -c $< -o $@
 
-build/sh2_gg_psg.o: src/sh2/gg_psg.c
+build/sh2_gg_psg.o: src/sh2/gg_psg.c | build
 	$(SH2_CC) $(SH2_CFLAGS_HOT) -c $< -o $@
 
-build/sh2_gg_psg_relay.o: src/sh2/gg_psg_relay.c
+build/sh2_gg_psg_relay.o: src/sh2/gg_psg_relay.c | build
 	$(SH2_CC) $(SH2_CFLAGS) -c $< -o $@
 
-build/sh2_cart.elf: $(CART_SH2_OBJS)
+build/sh2_cart.elf: $(CART_SH2_OBJS) | build
 	$(SH2_CC) -m2 -mb -T linker_mars.ld -Wl,-Map=build/sh2_cart.map -Wl,--gc-sections -nostdlib $(CART_SH2_OBJS) -lgcc -o $@
 
-build/ggplayer.32x: build/sh2_cart.elf
+build/ggplayer.32x: build/sh2_cart.elf | build
 	$(SH2_OBJCOPY) -O binary $< $@
 	@SIZE=$$(stat -c%s $@); \
 	 ALIGNED=$$(( (SIZE + 0xFFFF) & ~0xFFFF )); \
@@ -88,13 +91,13 @@ build/ggplayer.32x: build/sh2_cart.elf
 	python3 ../scripts/romheaderfix.py $@
 	@echo "Built ggplayer.32x: $$(stat -c%s $@) bytes"
 
-build/m68k_cart.o: src/m68k/hw_md_cart_min.s
+build/m68k_cart.o: src/m68k/hw_md_cart_min.s | build
 	$(M68K_GAS) $(M68K_GAS_FLAGS) -I src/m68k $< -o $@
 
-build/m68k_cart.elf: build/m68k_cart.o
+build/m68k_cart.elf: build/m68k_cart.o | build
 	$(M68K_LD) -T linker_m68k_cart.ld -o $@ $<
 
-build/m68k.bin: build/m68k_cart.elf
+build/m68k.bin: build/m68k_cart.elf | build
 	$(M68K_OBJCOPY) -O binary $< $@
 	@echo "Built m68k.bin: $$(stat -c%s $@) bytes"
 
