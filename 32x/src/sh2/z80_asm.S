@@ -889,8 +889,18 @@ _z80_ld_r_n:
         mov.b   r0, @(2, r14)  /* sync A to struct (generic handler) */
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
 
         /* Dst: RegOffsetsDst[opcode] → struct offset → write value */
@@ -1300,8 +1310,18 @@ _z80_xor_common:
 _z80_ld_b_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(10, r14)  /* delay slot: store to B */
 
@@ -1309,8 +1329,18 @@ _z80_ld_b_xhl:
 _z80_ld_c_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(11, r14)  /* delay slot: store to C */
 
@@ -1318,8 +1348,18 @@ _z80_ld_c_xhl:
 _z80_ld_d_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(12, r14)  /* delay slot: store to D */
 
@@ -1327,8 +1367,18 @@ _z80_ld_d_xhl:
 _z80_ld_e_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(13, r14)  /* delay slot: store to E */
 
@@ -1336,8 +1386,18 @@ _z80_ld_e_xhl:
 _z80_ld_h_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(8, r14)   /* delay slot: store to H */
 
@@ -1345,8 +1405,18 @@ _z80_ld_h_xhl:
 _z80_ld_l_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov.b   r0, @(9, r14)   /* delay slot: store to L */
 
@@ -1354,8 +1424,18 @@ _z80_ld_l_xhl:
 _z80_ld_a_xhl:
         add     #-7, r11
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4          /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         extu.b  r0, r12         /* delay slot: A = read value (pinned R12) */
 
@@ -1366,8 +1446,18 @@ _z80_ld_r_xhl:
         mov.b   r0, @(2, r14)  /* sync A to struct (generic handler) */
         /* Read byte at HL address */
         mov.w   @(8, r14), r0   /* HL */
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3          /* r3 = read value */
 
         /* Destination register index = bits 5-3 of opcode */
@@ -1383,6 +1473,13 @@ _z80_ld_r_xhl:
         mov.b   @(2, r14), r0
         bra     _z80_fetch
         extu.b  r0, r12 /* delay slot */
+
+/* Local literal pool: .Lb_reg_dst is referenced only by _z80_ld_r_xhl
+   above; keeping it adjacent keeps the forward-only mov.l in range after
+   the inlined read body was inserted into this handler. */
+.p2align 2
+.Lb_reg_dst:
+        .long   _RegOffsetsDst
 
 /* ================================================================ */
 /*  LD (HL),r — specialized per-register handlers          */
@@ -1492,8 +1589,18 @@ _z80_ld_xhl_n:
         /* Read immediate byte at PC */
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3          /* r3 = immediate value */
 
         /* Get HL address */
@@ -1512,16 +1619,36 @@ _z80_ld_xhl_n:
 _z80_ld_a_xbc:
         add     #-7, r11
         mov.w   @(10, r14), r0  /* BC */
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov     r0, r12          /* A (delay slot, pinned in R12) */
 
 _z80_ld_a_xde:
         add     #-7, r11
         mov.w   @(12, r14), r0  /* DE */
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         bra     _z80_fetch
         mov     r0, r12          /* A (delay slot, pinned in R12) */
 
@@ -1551,13 +1678,33 @@ _z80_ld_bc_nn:
         add     #-10, r11
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3          /* r3 = low byte */
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         /* r0 = high byte, r3 = low byte */
         shll8   r0
         or      r3, r0
@@ -1568,13 +1715,33 @@ _z80_ld_de_nn:
         add     #-10, r11
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         shll8   r0
         or      r3, r0
         bra     _z80_fetch
@@ -1584,13 +1751,33 @@ _z80_ld_hl_nn:
         add     #-10, r11
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         shll8   r0
         or      r3, r0
         bra     _z80_fetch
@@ -1600,13 +1787,33 @@ _z80_ld_sp_nn:
         add     #-10, r11
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
         mov     r7, r4
         add     #1, r7
-        bsr     _inline_gg_read
         extu.w  r7, r7 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         shll8   r0
         or      r3, r0
         bra     _z80_fetch
@@ -1734,12 +1941,32 @@ _z80_pop_bc:
         add     #-10, r11
         mov.w   @(16, r14), r0  /* SP */
         /* Read low byte */
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3          /* r3 = low (C) */
         /* Read high byte */
-        bsr     _inline_gg_read
         add     #1, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         /* r0 = high (B), r3 = low (C) */
         shll8   r0
         or      r3, r0
@@ -1755,11 +1982,31 @@ _z80_pop_bc:
 _z80_pop_de:
         add     #-10, r11
         mov.w   @(16, r14), r0
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
-        bsr     _inline_gg_read
         add     #1, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         shll8   r0
         or      r3, r0
         add     #1, r4
@@ -1773,11 +2020,31 @@ _z80_pop_de:
 _z80_pop_hl:
         add     #-10, r11
         mov.w   @(16, r14), r0
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3
-        bsr     _inline_gg_read
         add     #1, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         shll8   r0
         or      r3, r0
         add     #1, r4
@@ -1791,11 +2058,31 @@ _z80_pop_hl:
 _z80_pop_af:
         add     #-10, r11
         mov.w   @(16, r14), r0
-        bsr     _inline_gg_read
         extu.w  r0, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         mov     r0, r3          /* r3 = F */
-        bsr     _inline_gg_read
         add     #1, r4 /* delay slot */
+        mov     r4, r0          /* page computation; preserve r4 for multi-read */
+        shlr8   r0
+        shlr2   r0
+        shlr2   r0
+        shlr    r0              /* >>13 = page */
+        shll2   r0              /* offset = page * 4 into Mem_Pages[] */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base (LOAD) */
+        mov     r4, r0          /* copy addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF (R0 short form) */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
+        extu.b  r0, r0
         /* r0 = A, r3 = F — split into R12 and struct */
         extu.b  r0, r12         /* R12 = new A (pinned) */
         mov     r14, r0
@@ -1894,8 +2181,6 @@ _gg_write_slow:
         .long   _gg_mapper_write + 0x20000000
 .Lb_gg_write:
         .long   _gg_write + 0x20000000
-.Lb_reg_dst:
-        .long   _RegOffsetsDst
 .Lb_reg_src:
         .long   _RegOffsetsSrc
 
