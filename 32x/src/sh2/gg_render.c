@@ -280,6 +280,13 @@ void gg_render_init(void)
 uint8_t sat_line_count[SAT_PRECOMPUTE_LINES];
 uint8_t sat_line_idx[SAT_PRECOMPUTE_LINES][MAX_SPRITES_PER_LINE];
 
+/* SAT snapshot + config from the last frame we ran sat_precompute().  Used
+ * by the guard below to skip re-scanning on static-sprite frames. */
+static uint8_t sat_snapshot[64] __attribute__((aligned(16)));
+static int     sat_precompute_valid;
+static int     sat_prev_sprite_height;
+static int     sat_prev_wide;
+
 /* Moved to ROM (.text) — SDRAM cache conflict with Z80 interpreter */
 void sat_precompute(void)
 {
@@ -289,6 +296,21 @@ void sat_precompute(void)
     int sprite_height = Sprites_8x16 ? 16 : 8;
     int visible_lines = Wide_Screen_28 ? 224 : GG_HEIGHT;
     const uint8_t *sat = g_machine.VDP.sprite_attribute_table;
+
+    /* Byte-compare the SAT inline (avoids pulling in libgcc's _memcpy/_memcmp,
+     * which this bare-metal toolchain does not provide). Identical inputs
+     * produce identical sat_line_idx/sat_line_count, so skipping is correct and
+     * carries zero visual-corruption risk. Saves ~89K cycles/frame on
+     * static-sprite frames; worst-case overhead when sprites DO change is the
+     * 64-byte compare + two config compares (~tens of cycles). */
+    int sat_same = sat_precompute_valid && sprite_height == sat_prev_sprite_height
+        && (Wide_Screen_28 ? 1 : 0) == sat_prev_wide;
+    if (sat_same)
+    {
+        for (int k = 0; k < 64; k++)
+            if (sat[k] != sat_snapshot[k]) { sat_same = 0; break; }
+    }
+    if (sat_same) return;
 
     /* Clear all line counts (bulk zero via uint32_t writes).
      * Only clear the lines we'll actually scan — GG standard mode
@@ -349,6 +371,13 @@ void sat_precompute(void)
             }
         }
     }
+
+    /* Snapshot this frame's SAT + config so the next frame can skip re-scanning
+     * when nothing changed (see guard at function entry). */
+    for (int k = 0; k < 64; k++) sat_snapshot[k] = sat[k];
+    sat_prev_sprite_height = sprite_height;
+    sat_prev_wide = Wide_Screen_28 ? 1 : 0;
+    sat_precompute_valid = 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -370,12 +399,17 @@ static void render_background_line(uint16_t *dst, uint8_t *priority_buf, int lin
     int coarse_x = x_scroll >> 3;
     if (coarse_x == 0) coarse_x = 32;
 
-    /* Y scrolling */
+    /* Y scrolling. Wide mode masks to 8 bits (power of two -> cheap).
+     * Standard mode wraps vertical scroll at 224, a non-power-of-two that
+     * would otherwise force a software divide on the per-scanline hot path.
+     * y = line + scroll_y_latched is always >= 0 and < 448 here (line in
+     * [0,191] since GG_HEIGHT=192 guards this path, scroll in [0,255]), so a
+     * single compare-and-subtract reproduces % exactly and removes the divide. */
     int y = line + g_machine.VDP.scroll_y_latched;
     if (Wide_Screen_28)
         y &= 255;
-    else
-        y %= 224;
+    else if (y >= 224)
+        y -= 224;
 
     /* Name table row: each row is 32 entries × 2 bytes = 64 bytes.
        row_offset = (y / 8) * 64 */
@@ -454,7 +488,7 @@ static void render_background_line(uint16_t *dst, uint8_t *priority_buf, int lin
 
         /* Recalculate Y without scroll for locked columns */
         y = line;
-        if (Wide_Screen_28) y &= 255; else y %= 224;
+        if (Wide_Screen_28) y &= 255; else if (y >= 224) y -= 224;
         map_row = name_table + ((y >> 3) * 64);
         tile_line = y & 7;
         map_col = (32 - coarse_x + vscroll_lock_col) & 31;

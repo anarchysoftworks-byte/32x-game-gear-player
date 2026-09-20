@@ -6434,9 +6434,25 @@ _z80_pfx_dd:
         mov.b   @(3, r2), r0
         cmp/eq  #0x28, r0
         bf      .Ldd_normal
-        mov.b   @(4, r2), r0
-        cmp/eq  #0xFA, r0
-        bf      .Ldd_normal
+        mov.b   @(4, r2), r0          /* disp byte */
+        cmp/eq  #0xF9, r0             /* -7 (loop back to prefix byte) */
+        bf      .Ldd_off5a            /* not -7 -> try next */
+        nop
+        bra     .Ldd_flag_probe       /* matched -7: busy-wait loop */
+        nop
+.Ldd_off5a:
+        cmp/eq  #0xFA, r0             /* -6 (Sonic's exact VBlank poll) */
+        bf      .Ldd_off5b            /* not -6 -> try next */
+        nop
+        bra     .Ldd_flag_probe       /* matched -6 */
+        nop
+.Ldd_off5b:
+        cmp/eq  #0xFB, r0             /* -5 (loop past the prefix) */
+        bf      .Ldd_normal           /* none in {-7,-6,-5}: run normally */
+        nop
+        bra     .Ldd_flag_probe       /* matched -5 */
+        nop
+.Ldd_flag_probe:
 
         mov.b   @(1, r2), r0         /* d */
         mov     r0, r4
@@ -6536,9 +6552,25 @@ _z80_pfx_fd:
         mov.b   @(3, r2), r0
         cmp/eq  #0x28, r0            /* JR Z */
         bf      .Lfd_normal
-        mov.b   @(4, r2), r0
-        cmp/eq  #0xFA, r0            /* -6 */
-        bf      .Lfd_normal
+        mov.b   @(4, r2), r0          /* disp byte */
+        cmp/eq  #0xF9, r0             /* -7 (loop back to prefix byte) */
+        bf      .Lfd_off5a            /* not -7 -> try next */
+        nop
+        bra     .Lfd_flag_probe       /* matched -7: busy-wait loop */
+        nop
+.Lfd_off5a:
+        cmp/eq  #0xFA, r0             /* -6 (Sonic's exact VBlank poll) */
+        bf      .Lfd_off5b            /* not -6 -> try next */
+        nop
+        bra     .Lfd_flag_probe       /* matched -6 */
+        nop
+.Lfd_off5b:
+        cmp/eq  #0xFB, r0             /* -5 (loop past the prefix) */
+        bf      .Lfd_normal           /* none in {-7,-6,-5}: run normally */
+        nop
+        bra     .Lfd_flag_probe       /* matched -5 */
+        nop
+.Lfd_flag_probe:
 
         /* --- Pattern matched. Load flag byte *(IY+d) --- */
         mov.b   @(1, r2), r0         /* r0 = d (sign-ext by mov.b) */
@@ -6600,9 +6632,25 @@ _z80_pfx_fd:
         mov.b   @(3, r2), r0
         cmp/eq  #0x28, r0
         bf      .Lfd_normal
-        mov.b   @(4, r2), r0
-        cmp/eq  #0xFA, r0
-        bf      .Lfd_normal
+        mov.b   @(4, r2), r0          /* disp byte */
+        cmp/eq  #0xF9, r0             /* -7 (loop back to prefix byte) */
+        bf      .Lfd_lda_off5a        /* not -7 -> try next */
+        nop
+        bra     .Lfd_lda_flag_probe   /* matched -7: busy-wait loop */
+        nop
+.Lfd_lda_off5a:
+        cmp/eq  #0xFA, r0             /* -6 (Sonic's exact VBlank poll) */
+        bf      .Lfd_lda_off5b        /* not -6 -> try next */
+        nop
+        bra     .Lfd_lda_flag_probe   /* matched -6 */
+        nop
+.Lfd_lda_off5b:
+        cmp/eq  #0xFB, r0             /* -5 (loop past the prefix) */
+        bf      .Lfd_normal           /* none in {-7,-6,-5}: run normally */
+        nop
+        bra     .Lfd_lda_flag_probe   /* matched -5 */
+        nop
+.Lfd_lda_flag_probe:
 
         mov.b   @(1, r2), r0         /* d (signed) */
         mov     r0, r4

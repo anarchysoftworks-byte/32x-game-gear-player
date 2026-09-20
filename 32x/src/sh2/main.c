@@ -583,14 +583,17 @@ int main(void)
              * and other frame-global state before it starts rendering. */
             SH2_CCR = SH2_CCTL_CP | SH2_CCTL_CE;
 
-            /* Reset command pipeline and signal slave.  The slave
-             * does cache_purge + sat_precompute during the ~24
-             * non-visible Z80 lines, then processes render commands
-             * as they arrive from the inline scanline callback. */
+            /* Reset command pipeline and signal slave start.  The slave
+             * polls RENDER_FRAME_START directly (async ring-buffer
+             * handshake) — no COMM6→M68K→INTS relay is needed, so the
+             * vestigial TRIGGER_SLAVE_CMD() wake path has been dropped
+             * (see PERF_AUDIT.md F3): slave_cmd_wakeup is never read and
+             * nothing else writes COMM6.  The slave does cache_purge +
+             * sat_precompute during the ~24 non-visible Z80 lines, then
+             * processes render commands as they arrive from inline cb. */
             RENDER_CMD_COUNT = 0;
             RENDER_DONE_COUNT = 0;
             RENDER_FRAME_START = 1;
-            TRIGGER_SLAVE_CMD();
         }
 
         z80_run_frame(&z80, GG_CYCLES_PER_LINE, frame_scanline_cb);
@@ -635,11 +638,16 @@ int main(void)
 
         if (!skip_render) {
             /* Wait for slave to finish any remaining render commands.
-             * Render was running in parallel with Z80; in the typical
-             * case the slave is already done.  TRIGGER_SLAVE_CMD wakes
-             * the slave if it exhausted available commands and is in a
-             * NOP backoff gap. */
-            TRIGGER_SLAVE_CMD();
+             * Render ran in parallel with Z80; usually the slave is already
+             * done so this exits immediately.  The slave advances
+             * RENDER_DONE_COUNT on its next poll of RENDER_CMD_COUNT — its
+             * bounded ~32-NOP backoff guarantees a re-poll within tens of
+             * cycles, and these are volatile shared-SDRAM words the compiler
+             * cannot reorder or hide — so no COMM6 wakeup is needed.  The
+             * vestigial TRIGGER_SLAVE_CMD() relay has been dropped (see
+             * PERF_AUDIT.md F3).  Worst case is a few extra spin iterations,
+             * never a stall: RENDER_DONE_COUNT can only reach frame_cmd_idx
+             * once every posted command has actually been rendered. */
             while (RENDER_DONE_COUNT < frame_cmd_idx)
                 sh2_backoff_nops(32);
         }
