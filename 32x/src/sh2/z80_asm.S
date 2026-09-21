@@ -918,17 +918,16 @@ _z80_ld_r_n:
 
 /* ---- Inline GG memory read subroutine ---- */
 _inline_gg_read:
-        mov     r4, r0
-        shlr8   r0
-        shlr2   r0
-        shlr    r0
-        shlr    r0
-        shlr    r0
-        shll2   r0
-        mov.l   @(r0, r8), r1
-        mov     r4, r0
-        and     r10, r0
-        mov.b   @(r0, r1), r0
+        mov     r4, r0          /* addr */
+        shlr8   r0              /* >>8 */
+        shlr2   r0              /* >>10 */
+        shlr    r0              /* >>11 (was >>13 via 5 shifts) */
+        mov     #0x1C, r2       /* page*4 mask = bits [4:2] of addr>>11 */
+        and     r2, r0          /* r0 = (addr>>11)&0x1C = page*4 */
+        mov.l   @(r0, r8), r1   /* r1 = Mem_Pages[page] base */
+        mov     r4, r0          /* addr again for byte index */
+        and     r10, r0         /* r0 = addr & 0x1FFF */
+        mov.b   @(r0, r1), r0   /* value -> r0 */
         rts
         extu.b  r0, r0 /* delay slot */
 
