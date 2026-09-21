@@ -1,6 +1,6 @@
 .PHONY: all cart clean
 
-PERF_DEBUG ?= 0
+PERF_DEBUG ?= 1
 
 # Cart-only build: produces a .32x ROM
 all: cart

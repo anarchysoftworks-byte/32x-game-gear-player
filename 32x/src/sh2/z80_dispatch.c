@@ -14,6 +14,9 @@
 volatile uint16_t g_op_hist[256] = {0};
 #endif
 
+/* Prefix handlers run inline in z80_asm.S and are instrumented there; see the
+ * ED/CB sub-opcode histograms declared in gg_io.c.  No C-level instrumentation. */
+
 /* Use inline memory access for performance */
 #undef gg_read
 #define gg_read(addr)          GG_READ(addr)

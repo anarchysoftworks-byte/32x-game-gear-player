@@ -14,6 +14,22 @@
 #if PERF_DEBUG
 volatile uint32_t g_in_calls = 0;
 volatile uint32_t g_out_calls = 0;
+
+/* ---- ED / CB sub-opcode histograms (prefix-handler cache-thrash audit) ----
+ *
+ * The Z80 dispatch loop is pure SH-2 assembly (z80_asm.S): every opcode —
+ * including the ED/DD/FD/CB prefixes — jumps through a table to an inline
+ * handler, so these histograms are bumped there, not in any C function.  Each
+ * prefix pull pulls cold handler code into the shared 4KB I/D cache and evicts
+ * the hot interpreter stream (the ~4x cyc thrash seen during active display).
+ * The per-prefix COUNTS come straight from g_op_hist[0xED/0xDD/0xFD/0xCB]
+ * (also bumped in the asm fetch loop); these per-sub-opcode histograms instead
+ * show WHICH specific ED / CB opcodes dominate — the top entry is the worst
+ * offender.  g_ed_sub_hist covers every ED sub-opcode; g_cb_sub_hist covers both
+ * standalone CB (via _z80_cb_prefix) and compound DD+CB / FD+CB (via the DDCB/
+ * FDCB handler), e.g. ED DMA 0x42/0x53 or a common LD reg,(IX/IY+d). */
+volatile uint16_t g_ed_sub_hist[256] = {0};
+volatile uint16_t g_cb_sub_hist[256] = {0};
 #endif
 
 /* ------------------------------------------------------------------ */

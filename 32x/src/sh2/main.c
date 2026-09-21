@@ -555,6 +555,11 @@ int main(void)
         /* Reset per-opcode histogram at frame start — accumulates
          * over the whole frame (active + blanking) for this pass. */
         for (int i = 0; i < 256; i++) g_op_hist[i] = 0;
+
+        /* Prefix audit: reset the ED / CB sub-opcode histograms. */
+        extern volatile uint16_t g_ed_sub_hist[256];
+        extern volatile uint16_t g_cb_sub_hist[256];
+        for (int i = 0; i < 256; i++) { g_ed_sub_hist[i] = 0; g_cb_sub_hist[i] = 0; }
 #endif
 
         /* ============================================================ */
@@ -680,9 +685,10 @@ int main(void)
                 uint16_t orange  = COLOR(31,16,0) | 0x8000;
                 uint16_t yellow  = COLOR(31,31,0) | 0x8000;
 
-                /* Clear background: 50px left, 80px right × 44 rows.
+                /* Clear background: 50px left, 80px right × rows.
+                 * Left panel extended to ~84 rows for the ED/DMA prefix audit.
                  * Right panel widened to fit 5-digit histogram counts. */
-                for (int row = 0; row < 44; row++) {
+                for (int row = 0; row < 84; row++) {
                     volatile uint16_t *line = gg_fb_ptr + gg_fb_ptr[base_y + row];
                     for (int cx = 0; cx < 50; cx++) {
                         line[cx] = black;
@@ -696,6 +702,17 @@ int main(void)
                 draw_number(gg_fb_ptr, base_y + 11, 1, perf_t1b, orange);
                 draw_number(gg_fb_ptr, base_y + 22, 1, perf_t2, COLOR(31,0,31) | 0x8000);
                 draw_number(gg_fb_ptr, base_y + 33, 1, perf_frame_count, yellow);
+
+                /* ---- Prefix-handler audit (left panel) ----
+                 * How often each prefix is dispatched this frame — read straight from
+                 * the per-opcode histogram g_op_hist[0xE3/0xCB/0xDD/0xFD] (ground truth,
+                 * bumped in the asm fetch loop).  Every ED/DD/FD/CB op jumps through the
+                 * dispatch table to an inline handler, so these counts ARE the cold-
+                 * handler pull frequency — the cache-thrash event rate.  Order = row 44/55/66. */
+                extern volatile uint16_t g_op_hist[256];
+                draw_number(gg_fb_ptr, base_y + 44, 1, g_op_hist[0xE3],      COLOR(0,31,31) | 0x8000);   /* ED   */
+                draw_number(gg_fb_ptr, base_y + 55, 1, g_op_hist[0xCB],     orange);                     /* CB   */
+                draw_number(gg_fb_ptr, base_y + 66, 1, g_op_hist[0xDD] + g_op_hist[0xFD], yellow);       /* DD/FD*/
 
                 /* Top-3 main-opcode histogram for this frame.
                  * Replaces the broken g_op_count/out/in readouts: g_op_count
@@ -727,6 +744,27 @@ int main(void)
                 draw_number(gg_fb_ptr, base_y + 11, 320 - 80 + 23, top_cnt[1], orange);
                 draw_number(gg_fb_ptr, base_y + 22, 320 - 80 + 1,  top_op[2],  yellow);
                 draw_number(gg_fb_ptr, base_y + 22, 320 - 80 + 23, top_cnt[2], yellow);
+
+                /* ---- Dominant ED/CB sub-opcodes (right panel) ----
+                 * Which specific prefix opcodes drive the cache-thrash —
+                 * the top entry is the worst offender. Scan g_ed_sub_hist /
+                 * g_cb_sub_hist (bumped in z80_asm.S at the ED/CB prefix handlers). */
+                {
+                    uint8_t  ed_top_op = 0;   uint16_t ed_top_cnt = 0;
+                    uint8_t  cb_top_op = 0;   uint16_t cb_top_cnt = 0;
+                    for (int i = 0; i < 256; i++) {
+                        if (g_ed_sub_hist[i] > ed_top_cnt) {
+                            ed_top_cnt = g_ed_sub_hist[i]; ed_top_op = (uint8_t)i;
+                        }
+                        if (g_cb_sub_hist[i] > cb_top_cnt) {
+                            cb_top_cnt = g_cb_sub_hist[i]; cb_top_op = (uint8_t)i;
+                        }
+                    }
+                    draw_number(gg_fb_ptr, base_y + 33, 320 - 80 + 1,  ed_top_op,    COLOR(0,31,31) | 0x8000);   /* ED sub-op */
+                    draw_number(gg_fb_ptr, base_y + 33, 320 - 80 + 23, ed_top_cnt,   COLOR(0,31,31) | 0x8000);   /* ED count  */
+                    draw_number(gg_fb_ptr, base_y + 44, 320 - 80 + 1,  cb_top_op,    orange);                     /* CB sub-op */
+                    draw_number(gg_fb_ptr, base_y + 44, 320 - 80 + 23, cb_top_cnt,   orange);                     /* CB count  */
+                }
 
                 /* Alternating block: 10×10 pixels at col 40. */
                 {

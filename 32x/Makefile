@@ -6,7 +6,7 @@ M68K_GAS     = m68k-elf-as
 M68K_LD      = m68k-elf-ld
 M68K_OBJCOPY = m68k-elf-objcopy
 
-PERF_DEBUG  ?= 0
+PERF_DEBUG  ?= 1
 
 # Base flags shared by all SH-2 modules
 SH2_CFLAGS_BASE = -m2 -mb -Wall -g -c -fomit-frame-pointer -fno-tree-loop-distribute-patterns -fno-strict-aliasing -ffunction-sections -fdata-sections -D__32X__ -DPERF_DEBUG=$(PERF_DEBUG) -Iinclude/sh2 -I../shared

@@ -3559,6 +3559,19 @@ _z80_pfx_ed:
         nop
         /* r3 = sub-opcode, PC advanced */
 
+#if PERF_DEBUG
+        /* Prefix audit: g_ed_sub_hist[sub]++.  r3 stays intact for the CyclesED
+         * lookup below; copy it to r2 as index.  r0/r1 are scratch (re-derived by
+         * the R++ block).  u16 histogram, matches g_op_hist style. */
+        mov     r3, r2                 /* r2 = sub-opcode (r3 preserved) */
+        mov.l   .Lg_ed_sub_hist, r0    /* r0 = &g_ed_sub_hist[256] */
+        shll    r2                     /* r2 = sub * 2 (u16 index) */
+        add     r2, r0                 /* r0 = &g_ed_sub_hist[sub] */
+        mov.w   @r0, r1                /* r1 = current count */
+        add     #1, r1
+        mov.w   r1, @r0                /* write back (wraps at 65536; safe per frame) */
+#endif
+
         /* R++ (offset Z80_R=15) */
         mov     r14, r0
         add     #15, r0
@@ -3603,6 +3616,8 @@ _z80_pfx_ed:
         .long   _CyclesED
 .Led_table_ptr_near:
         .long   _z80_ed_dispatch_table
+.Lg_ed_sub_hist:
+        .long   _g_ed_sub_hist
 
 /* ---- ED: LDIR (0xB0) — Block transfer HL→DE, repeat until BC=0 ---- */
 _z80_ed_ldir:
@@ -6798,6 +6813,22 @@ _z80_pfx_xx_common:
         /* 3. Fetch sub-opcode byte */
         bsr     _far_fetch_imm3
         nop                    /* r3 = DDCB/FDCB sub-opcode */
+
+#if PERF_DEBUG
+        /* Compound CB (DD/FD + CB): g_cb_sub_hist[sub]++.  r3 holds the DDCB/
+         * FDCB sub-opcode here; copy it to r2 as index and preserve r3.  r0/r1
+         * are scratch per this handler's contract (see header above). */
+        mov     r3, r2                 /* r2 = sub-opcode (r3 preserved) */
+        mov.l   .Lg_cb_sub_hist_xx, r0  /* r0 = &g_cb_sub_hist[256] */
+        shll    r2                     /* r2 = sub * 2 (u16 index) */
+        add     r2, r0                 /* r0 = &g_cb_sub_hist[sub] */
+        mov.w   @r0, r1                /* r1 = current count */
+        add     #1, r1
+        mov.w   r1, @r0                /* write back (wraps at 65536; safe per frame) */
+        .align 2
+.Lg_cb_sub_hist_xx:
+        .long   _g_cb_sub_hist
+#endif
         /* 4. Charge 23 cycles (BIT corrects to 20 later) */
         add     #-23, r11
         /* 5. Read byte from (XX+d) */
@@ -9231,6 +9262,21 @@ _z80_cb_prefix:
         and     r10, r0       /* r0 = PC & 0x1FFF */
         mov.b   @(r0, r2), r0
         extu.b  r0, r5         /* r5 = CB sub-opcode */
+
+#if PERF_DEBUG
+        /* Prefix audit: g_cb_sub_hist[r5]++.  r5 stays intact for the decode below;
+         * copy it to r2 as index.  r0/r1 are scratch (re-derived later). */
+        mov     r5, r2                 /* r2 = sub-opcode (r5 preserved) */
+        mov.l   .Lg_cb_sub_hist, r0    /* r0 = &g_cb_sub_hist[256] */
+        shll    r2                     /* r2 = sub * 2 (u16 index) */
+        add     r2, r0                 /* r0 = &g_cb_sub_hist[sub] */
+        mov.w   @r0, r1                /* r1 = current count */
+        add     #1, r1
+        mov.w   r1, @r0                /* write back (wraps at 65536; safe per frame) */
+        .align 2
+.Lg_cb_sub_hist:
+        .long   _g_cb_sub_hist
+#endif
 
         /* ---- PC++ ---- */
         add     #1, r7
