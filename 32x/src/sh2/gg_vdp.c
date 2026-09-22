@@ -280,7 +280,11 @@ uint8_t gg_vdp_status_read(void)
      * collision/overflow flags set by the slave SH-2's renderer. */
     b = *(volatile uint8_t *)SH2_UNCACHED(&gg.VDP_Status);
     gg.VDP_Status = b & 0x1F;       /* Clear VBlank, 9th sprite, collision */
-    /* Write cleared value back through uncached path too */
+    /* Write cleared value back through uncached path too. The cached write
+     * above is required: main.c and the VDP_STATUS_SET macro OR new flags
+     * into gg.VDP_Status via the CACHED view, so it must stay coherent with
+     * the cleared byte here (an uncached-only write would leave a stale cache
+     * line and re-set bits we just cleared). */
     *(volatile uint8_t *)SH2_UNCACHED(&gg.VDP_Status) = gg.VDP_Status;
     gg.VDP_Access_Mode = 0;
     gg.Pending_HBlank = 0;
