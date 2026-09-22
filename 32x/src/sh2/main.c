@@ -57,6 +57,9 @@ static inline void sh2_backoff_nops(uint32_t count)
  * OLD: clk/8 wrapped at 22.7ms — a 4× overrun frame (67ms) wraps
  * 3 times, making the bars look green (fast) when the game is slow! */
 #define PERF_TICKS_PER_PX  9
+/* One NTSC frame at 60 Hz ≈ 2,996 FRT ticks (clk/128). Used by the slack
+ * marker to express headroom vs. budget as a percentage. */
+#define PERF_TICKS_PER_FRAME 2996
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -334,7 +337,6 @@ int frame_line;
 int frame_cmd_idx;
 int skip_render;   /* 1 = skip rendering this frame (frame skip for 30fps) */
 #if PERF_DEBUG
-static uint16_t frame_perf_t1;
 static uint16_t frame_perf_t1b;  /* time between first and second z80_run_frame */
 /* Blanking-mode flag (see overlay marker + COMM14): 1 = the blanking burst is
  * HALT(0x76)-dominant with ~2 distinct ops, so the built-in Z80_BLANK_IDLE_SKIP
@@ -395,11 +397,6 @@ int frame_scanline_cb(z80_t *R)
                 RENDER_CMD_COUNT = (int16_t)frame_cmd_idx;
             }
         }
-
-#if PERF_DEBUG
-        if (line == GG_Y_INT - 1)
-            frame_perf_t1 = sh2_frt_read();
-#endif
     }
     else if (line == GG_Y_INT) {
         /* Line 192: last H-blank tick before VBlank */
@@ -549,6 +546,9 @@ int main(void)
     SH2_FRT_FTCSR = 0x00;             /* clear flags, CCLRA=0 */
     SH2_FRT_TCR   = SH2_FRT_CKS_128;  /* internal / 128 — prevents 16-bit wrap */
     uint16_t perf_frame_count = 0;
+    /* Total frame time (incl. wait_vblank + fb_flip) from the previous frame,
+     * used by the on-screen slack marker shown at the top of each new frame. */
+    uint16_t perf_prev_used = 0;
 #endif
 
     for (;;)
@@ -596,9 +596,6 @@ int main(void)
 
         frame_line = 0;
         frame_cmd_idx = 0;
-#if PERF_DEBUG
-        frame_perf_t1 = perf_t0;  /* default if y_int never reached */
-#endif
 
         if (!skip_render) {
             /* Flush master cache to SDRAM so the slave sees our latest
@@ -730,9 +727,16 @@ int main(void)
 #endif
 
 #if PERF_DEBUG
-        uint16_t perf_t1 = frame_perf_t1;
-        uint16_t perf_t1b = frame_perf_t1b;
-        uint16_t perf_t2 = sh2_frt_read();
+        /* t1 is the END-OF-VISIBLE timestamp (frame_perf_t1b, captured right
+         * after the visible z80_run_frame returns).  Splitting vis = t1 - t0
+         * from blk = t2 - t1 here makes the bars honest: red = visible
+         * scanlines, orange = the blanking burst.  (frame_perf_t1b was chosen
+         * over the old frame_perf_t1 because it is captured once in main()'s
+         * flow at a single point rather than inside the per-scanline callback.) */
+        uint16_t perf_t1 = frame_perf_t1b;   /* end of visible phase */
+        uint16_t perf_t2 = sh2_frt_read();   /* end of blanking burst */
+        uint16_t vis = (uint16_t)(perf_t1 - perf_t0);  /* visible scanline cycles */
+        uint16_t blk = (uint16_t)(perf_t2 - perf_t1);  /* blanking-burst cycles */
 #endif
 
         if (!skip_render) {
@@ -753,6 +757,7 @@ int main(void)
 
 #if PERF_DEBUG
         uint16_t perf_t3 = sh2_frt_read();  /* end of render wait */
+        uint16_t rw  = (uint16_t)(perf_t3 - perf_t2);    /* render-wait overhead */
 #endif
 
         /* Draw perf overlay BEFORE vblank so the drawing time doesn't
@@ -764,14 +769,20 @@ int main(void)
             perf_draw_bar(gg_fb_ptr, perf_t0, perf_t1,
                           perf_t2, perf_t3, perf_t3);
             perf_frame_count++;
-            /* On-screen diagnostics — one value per row, 2× font.
-             * Each row = 11px tall (10px digits + 1px gap).
-             * Layout:
-             *   Row 0: t1       (white)  — FRT ticks for Z80 active display
-             *   Row 1: t1b      (orange) — FRT ticks between active/blanking
-             *   Row 2: t2       (magenta)— FRT ticks through blanking
-             *   Row 3: frame#   (yellow) — frame counter
-             * Plus a 10×10 block that alternates white/red each frame. */
+             /* On-screen diagnostics: one value per row, 2x font.
+              * Each row = 11px tall (10px digits + 1px gap). Values are FRT
+              * cycle deltas between the timestamps captured above; FRT is a
+              * free-running 16-bit counter that does not wrap within one frame
+              * even at ~20x overrun. Colors mirror the timing bars:
+              *   Row 0: visible  (white)  - Z80 cycles for visible scanlines
+              *   Row 1: blanking (orange) - Z80 cycles in the VBlank burst
+              *        (dominant cost; matches the orange bar segment)
+              *   Row 2: rwait    (blue)  - master's render-wait overhead
+              *   Row 3: frame#   (yellow) - cumulative frame counter
+              *   Row 4: slack%   (g/a/r) - headroom vs one-frame budget,
+              *        using total frame time measured AFTER fb_flip last frame
+              *        (green = headroom, amber = tight ~8%, red = over budget)
+              * Plus a 10x10 block that alternates white/red each frame. */
             {
                 int base_y = emu_config.fb_y_offset + 3;
                 uint16_t black   = 0x8000;
@@ -793,10 +804,25 @@ int main(void)
                     }
                 }
 
-                draw_number(gg_fb_ptr, base_y +  0, 1, perf_t1, white);
-                draw_number(gg_fb_ptr, base_y + 11, 1, perf_t1b, orange);
-                draw_number(gg_fb_ptr, base_y + 22, 1, perf_t2, COLOR(31,0,31) | 0x8000);
+                draw_number(gg_fb_ptr, base_y +  0, 1, vis, white);
+                draw_number(gg_fb_ptr, base_y + 11, 1, blk, orange);
+                draw_number(gg_fb_ptr, base_y + 22, 1, rw, COLOR(0,0,31) | 0x8000);
                 draw_number(gg_fb_ptr, base_y + 33, 1, perf_frame_count, yellow);
+
+                /* Frame-slack marker (Tier-1 item 1): headroom vs. one-frame
+                 * budget, using total frame time measured AFTER fb_flip last
+                 * frame.  Green = headroom, amber = tight (~8%), red = over
+                 * budget.  Shows last frame's value (one-frame display latency,
+                 * which is fine for steady-state diagnosis). */
+                {
+                    int32_t slack = (int32_t)PERF_TICKS_PER_FRAME - perf_prev_used;
+                    uint16_t slack_pct = (uint16_t)(((slack >= 0 ? slack : -slack) * 100)
+                                                    / PERF_TICKS_PER_FRAME);
+                    uint16_t scolor = slack > 0 ? (COLOR(0,31,0) | 0x8000)
+                              : slack < 0 ? (COLOR(31,0,0) | 0x8000)
+                                          : (COLOR(31,31,0) | 0x8000);
+                    draw_number(gg_fb_ptr, base_y + 44, 1, slack_pct, scolor);
+                }
 
                 /* Top-3 main-opcode histogram for this frame.
                  * Replaces the broken g_op_count/out/in readouts: g_op_count
@@ -861,8 +887,14 @@ int main(void)
                     }
                 }
             }
-            MARS_SYS_COMM10 = perf_t1;
-            MARS_SYS_COMM12 = perf_t2;
+            /* COMM register readout (Tier-1). Only even-numbered shared regs
+             * exist; COMM6=wake, COMM8=pad1, COMM14=blanking histogram are all
+             * committed, so COMM10/COMM12 carry the two dominant Z80 lumps.
+             *   COMM10 = visible-scanline cycles (white bar segment)
+             *   COMM12 = blanking-burst cycles    (orange bar segment; dominant)
+             * rw and slack% are shown on-screen only. */
+            MARS_SYS_COMM10 = vis;
+            MARS_SYS_COMM12 = blk;
 #endif
         }
 
@@ -873,6 +905,14 @@ int main(void)
 
         if (!skip_render) {
             fb_flip();
+#if PERF_DEBUG
+            /* Capture total frame time (incl. wait_vblank + fb_flip) now that
+             * fb_flip is done, so the slack marker at the top of NEXT frame has
+             * a real denominator vs. one-frame budget (~2996 FRT ticks). Modular
+             * subtraction against perf_t0 (VBlank entry) stays correct across any
+             * 16-bit FRT wrap within the frame. */
+            perf_prev_used = (uint16_t)(sh2_frt_read() - perf_t0);
+#endif
         }
     }
 }
