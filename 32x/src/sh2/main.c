@@ -379,8 +379,21 @@ int frame_scanline_cb(z80_t *R)
 
         /* Render command for GG viewport lines (skipped on frame-skip frames) */
         if (!skip_render && line >= GG_RENDER_START && line < GG_RENDER_END) {
-            while (frame_cmd_idx - (int)RENDER_DONE_COUNT >= GG_RENDER_LEAD)
-                sh2_backoff_nops(16);
+            /* Backpressure poll REMOVED as provably-dead code (see
+             * RENDER_OPTIMIZATION_AUDIT.md C2).  Previously:
+             *     while (frame_cmd_idx - (int)RENDER_DONE_COUNT >= GG_RENDER_LEAD)
+             *         sh2_backoff_nops(16);
+             * It polled RENDER_DONE_COUNT on every visible scanline to keep the
+             * master's write head from outrunning the slave by > LEAD.  With
+             * GG_RENDER_LEAD=200 it can never fire: only
+             * (GG_RENDER_END - GG_RENDER_START) = 144 commands are posted per frame,
+             * and both frame_cmd_idx and RENDER_DONE_COUNT reset to 0 at frame
+             * start, so the write-read gap is bounded by 144 —
+             * which is < LEAD=200 AND < RENDER_CMD_MAX=224.  The ring can never
+             * overflow regardless of this poll, so it was pure overhead: ~144 uncached
+             * reads + branch per frame on the visible hot path.
+             * RE-ADD ONLY IF non-render commands are added to RENDER_CMDS or if
+             * (GG_RENDER_END - GG_RENDER_START) ever exceeds 224. */
             /* Pack all 4 bytes into a single 32-bit uncached store.
              * Layout: line (bits 31-16) | scroll_x (bits 15-8) | flags (bits 7-0).
              * Matches slave batch-read decomposition in gg_psg.c.
