@@ -37,6 +37,18 @@ static inline void sh2_backoff_nops(uint32_t count)
 #define PERF_DEBUG  0
 #endif
 
+/* Z80 blank-burst idle-skip. When enabled, if the Z80 is spinning in HALT
+ * during VBlank it reclaims those cycles instead of burning them. Default OFF:
+ * a cleanly-halted Z80 burns its whole budget in O(1) (_z80_halt), so halted
+ * blanking is nearly free and "mostly orange" blanking usually means polling-jr
+ * or real VBlank work, which this cannot see — MEASURE first (see below).
+ * Assembly-free: detection reads R->IFF & 0x80 + R->PC stability only.
+ * Provably safe: it skips ONLY genuine halt-spin (zero memory/I/O side effects);
+ * never touches the active phase or sound/input-critical code. */
+#ifndef Z80_BLANK_IDLE_SKIP
+#define Z80_BLANK_IDLE_SKIP  0
+#endif
+
 #if PERF_DEBUG
 /* FRT at clk/128 with 23.01 MHz SH-2 → ~179,766 Hz.
  * 60 fps frame ≈ 2,996 ticks.  16-bit FRT wraps at 65,536 ticks
@@ -324,6 +336,17 @@ int skip_render;   /* 1 = skip rendering this frame (frame skip for 30fps) */
 #if PERF_DEBUG
 static uint16_t frame_perf_t1;
 static uint16_t frame_perf_t1b;  /* time between first and second z80_run_frame */
+/* Blanking-mode flag (see overlay marker + COMM14): 1 = the blanking burst is
+ * HALT(0x76)-dominant with ~2 distinct ops, so the built-in Z80_BLANK_IDLE_SKIP
+ * would remove it and shrink the orange bar; 0 = polling-jr / real VBlank work
+ * that must NOT be skipped. Drives the on-screen blanking-mode marker below. */
+static uint8_t  perf_blank_halt;
+/* Blanking hot-opcodes (hoisted so the overlay below can read them back).
+ * b_top_op[0] is exactly COMM14's high byte — the single most-frequent opcode
+ * executed during the VBlank burst. We can't skip that work (marker is amber),
+ * so this tells us WHICH handler to optimize next. */
+static uint8_t  b_top_op[3];
+static uint16_t b_top_cnt[3];
 #endif
 
 __attribute__((section(".sdram_code")))
@@ -621,14 +644,90 @@ int main(void)
          * scattered data causing D-cache fills that evict hot interpreter
          * code.  With OD=1, data-read misses bypass the cache entirely
          * (SDRAM direct), keeping the interpreter stream resident. */
+
+        /* PERF_DEBUG: snapshot the whole-frame opcode histogram BEFORE blanking
+         * so we can isolate the blanking-phase workload by differencing.
+         * g_op_hist is bumped unconditionally in z80_asm.S's fetch loop; at
+         * this point it holds only t1 (active-display) contributions. */
+#if PERF_DEBUG
+        extern volatile uint16_t g_op_hist[256];
+        static uint16_t hist_blank_before[256];
+        for (int i = 0; i < 256; i++) hist_blank_before[i] = g_op_hist[i];
+#endif
+
+#if Z80_BLANK_IDLE_SKIP
+        /* ---- Blank-burst idle-skip (see PERF_AUDIT.md §HALT-IDLE-SKIP) ---- */
+        /* If the Z80 is spinning in HALT during VBlank, reclaim those cycles.
+         * Detection after one line-chunk: halt-bit (IFF&0x80) set AND PC has not
+         * advanced past the HALT opcode = genuine halt-spin. A jr/poll loop moves
+         * no net PC but never sets IFF&0x80, so it is correctly NOT skipped here
+         * (that path needs side-effect instrumentation instead). */
+        SH2_CCR = SH2_CCTL_OD | SH2_CCTL_CE;
+        {
+            int remaining = GG_BLANKING_LINES * GG_CYCLES_PER_LINE;
+            uint16_t pc_probe = z80.PC.W;
+            z80_run(&z80, GG_CYCLES_PER_LINE);   /* probe one line */
+            remaining -= GG_CYCLES_PER_LINE;
+            if ((z80.IFF & 0x80) && (z80.PC.W == pc_probe)) {
+                /* Confirmed halt-spin: self-perpetuating through all of VBlank,
+                 * zero memory/I/O side effects. Skip the rest — those cycles
+                 * would otherwise burn in _z80_halt with no effect. ICount is
+                 * already ~0 after the probe (halt-burn leaves it at the mod-4
+                 * remainder), so next frame starts fresh: no carry-over. */
+            } else if (remaining > 0) {
+                /* Not halting: real VBlank work or polling-jr without HALT.
+                 * Run the remainder normally — never skip active code. */
+                z80_run(&z80, remaining);
+            }
+        }
+        SH2_CCR = SH2_CCTL_CP | SH2_CCTL_CE;
+#else
+        /* ---- Original blanking burst (OD=1 cache strategy) ---- */
         SH2_CCR = SH2_CCTL_OD | SH2_CCTL_CE;
         z80_run_frame(&z80, GG_BLANKING_LINES * GG_CYCLES_PER_LINE, (void*)0);
-        /* Restore normal caching + purge so next frame's active phase
-         * starts with a clean D-cache (no stale OD=1 artifacts). */
         SH2_CCR = SH2_CCTL_CP | SH2_CCTL_CE;
+#endif
         tgg.VDP_Line = GG_LINES_NTSC - 1;
 
         MARS_SYS_COMM12 = 0xBBBB;  /* marker: blanking Z80 complete */
+
+#if PERF_DEBUG
+        {
+            /* Isolate the blanking-phase opcode workload by differencing against
+             * the pre-blanking snapshot. Ground truth for choosing an
+             * optimization: HALT(0x76)-dominant with zero writes → idle-skip
+             * helps; polling-jr (0x18/0xC3/DD...) with zero writes → needs a
+             * side-effect detector; port I/O / real opcodes → VBlank work, do NOT
+             * skip the Z80. Exposed via free COMM registers for hardware readout. */
+             /* Hoisted to function scope (see above). Clear each frame: blanking
+              * workload varies, so stale ranking entries from a previous frame would
+              * otherwise skew the results below. */
+             b_top_op[0]=b_top_op[1]=b_top_op[2] = 0;
+             b_top_cnt[0]=b_top_cnt[1]=b_top_cnt[2] = 0;
+             uint16_t g_blank_distinct = 0;
+            for (int i = 0; i < 256; i++) {
+                uint16_t d = g_op_hist[i] - hist_blank_before[i];
+                if (d > 0) {
+                    g_blank_distinct++;
+                    if (d > b_top_cnt[0]) {
+                        b_top_op[2]=b_top_op[1]; b_top_cnt[2]=b_top_cnt[1];
+                        b_top_op[1]=b_top_op[0]; b_top_cnt[1]=b_top_cnt[0];
+                        b_top_op[0]=(uint8_t)i; b_top_cnt[0]=d;
+                    } else if (d > b_top_cnt[1]) {
+                        b_top_op[2]=b_top_op[1]; b_top_cnt[2]=b_top_cnt[1];
+                        b_top_op[1]=(uint8_t)i; b_top_cnt[1]=d;
+                    } else if (d > b_top_cnt[2]) {
+                        b_top_op[2]=(uint8_t)i; b_top_cnt[2]=d;
+                    }
+                }
+            }
+             /* low byte = distinct blanking opcode count (primary discriminator); high byte = most-frequent blanking opcode (0x76 => HALT-dominated). COMM8/10/12 are MD-VBL-owned (32x.h) and COMM6 feeds slave-wake, so COMM14 is the only unambiguously free shared register. */
+             MARS_SYS_COMM14 = ((uint16_t)b_top_op[0] << 8) | g_blank_distinct;
+             /* On-screen discriminator marker (see overlay below): HALT-dominated
+              * => idle-skip safe; anything else => real work, leave the Z80 running. */
+             perf_blank_halt = (g_blank_distinct <= 2 && b_top_op[0] == 0x76) ? 1 : 0;
+        }
+#endif
 
 #if PERF_DEBUG
         uint16_t perf_t1 = frame_perf_t1;
@@ -682,7 +781,9 @@ int main(void)
 
                 /* Clear background: 50px left, 80px right × 44 rows.
                  * Right panel widened to fit 5-digit histogram counts. */
-                for (int row = 0; row < 44; row++) {
+                /* Extend one extra row below the marker so the blanking-opcode
+                 * readout at base_y+44 has clean black background to sit on. */
+                for (int row = 0; row < 55; row++) {
                     volatile uint16_t *line = gg_fb_ptr + gg_fb_ptr[base_y + row];
                     for (int cx = 0; cx < 50; cx++) {
                         line[cx] = black;
@@ -727,6 +828,26 @@ int main(void)
                 draw_number(gg_fb_ptr, base_y + 11, 320 - 80 + 23, top_cnt[1], orange);
                 draw_number(gg_fb_ptr, base_y + 22, 320 - 80 + 1,  top_op[2],  yellow);
                 draw_number(gg_fb_ptr, base_y + 22, 320 - 80 + 23, top_cnt[2], yellow);
+
+                /* Blanking-mode marker (bottom row of left panel): tells you whether the
+                 * built-in Z80_BLANK_IDLE_SKIP would shrink the orange bar THIS frame.
+                 *   green = HALT(0x76)-dominant, ~2 distinct ops -> idle-skip safe
+                 *   amber = polling-jr / real VBlank work          -> leave Z80 running */
+                {
+                    volatile uint16_t *line = gg_fb_ptr + gg_fb_ptr[base_y + 43];
+                    uint16_t mark = perf_blank_halt ? (COLOR(0,31,0) | 0x8000) : (COLOR(31,16,0) | 0x8000);
+                    for (int cx = 0; cx < 12; cx++) line[cx] = mark;
+                }
+
+                /* Blanking-isolated hot-opcodes (same opcode-decimal + count-decimal
+                 * format as the whole-frame histogram above, but isolated to the VBlank
+                 * burst via frame-differencing). Distinct colors so it reads as its own
+                 * section below the histogram — tells us WHICH instruction eats the
+                 * orange bar. Marker is amber so we can't skip them; this targets the fix. */
+                draw_number(gg_fb_ptr, base_y + 33, 320 - 80 + 1, b_top_op[0], COLOR(0,31,0) | 0x8000);
+                draw_number(gg_fb_ptr, base_y + 33, 320 - 80 + 23, b_top_cnt[0], COLOR(0,31,0) | 0x8000);
+                draw_number(gg_fb_ptr, base_y + 44, 320 - 80 + 1, b_top_op[1], white);
+                draw_number(gg_fb_ptr, base_y + 44, 320 - 80 + 23, b_top_cnt[1], white);
 
                 /* Alternating block: 10×10 pixels at col 40. */
                 {

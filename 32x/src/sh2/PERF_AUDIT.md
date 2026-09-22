@@ -15,36 +15,37 @@ This file consolidates the hot-path audit of `z80_asm.S` and its callers in
 
 ## Ranked bottlenecks (highest impact first)
 
-### #1 — Per-byte page computation in `_inline_gg_read` (line 920). [HOTTEST]
-Every Z80 byte load funnels through this routine. It computes the backing-page
-base pointer from a raw 16-bit address with **3 shifts** (`shlr8; shlr2; shlr`)
-plus `and #0x1C`, then a table load `mov.l @(r0,r8)` and a masked byte load:
+### #1 — Per-byte page computation in `_inline_gg_read` (line 920). [EVALUATED — REJECTED]
+Every Z80 byte load funnels through this routine: `shlr8; shlr2; shlr` + `and #0x1C`
++ a table load `mov.l @(r0,r8)` + masked byte load. Looks like an easy target, but it
+was evaluated and **rejected** — see "Why rejected" below.
 
     mov     r4, r0          ; addr
     shlr8   r0              ; >>8
-    shlr2   r0              ; >>2  (total >>10)
-    shlr    r0              ; >>1  (total >>11 = page*4 after mask)
-    mov     #0x1C, r2       ; page*4 mask = bits [4:2]
-    and     r2, r0          ; r0 = (addr>>11)&0x1C = Mem_Pages offset
-    mov.l   @(r0, r8), r1   ; r1 = Mem_Pages[page] base  <-- the only cache miss per access
-    mov     r4, r0
+    shlr2   r0              ; >>2
+    shlr    r0              ; >>1  (>>11 combined with mask = page*4)
+    mov     #0x1C, r2       ; mask bits [4:2]
+    and     r2, r0          ; r0 = Mem_Pages offset
+    mov.l   @(r0, r8), r1   ; base pointer for this page
     and     r10, r0         ; addr & 0x1FFF byte index
     mov.b   @(r0, r1), r0   ; load byte
 
-Cost ≈ **7 instructions / byte load**. The `mov.l @(r0,r8)` table fetch is a real
-memory access on the hottest path. Multi-byte ops (`POP BC/DE`, etc.) inline this
-sequence twice (~40 instr each) — expensive but less frequent than plain loads.
+WHY IT LOOKS ATTRACTIVE: Z80 game code is dominated by tight loops / sequential RAM, so
+consecutive accesses share a page — recomputing the base pointer each time throws away
+that locality. A naive fix keeps a `(key, base)` cache and skips the shifts on a hit.
 
-WHY IT HURTS: Z80 game code is dominated by tight loops and sequential RAM access,
-so consecutive accesses almost always hit the same page. Recomputing the base
-pointer from scratch every time throws away that locality.
+WHY REJECTED (net ≈ zero):
+- The dominant cost is the byte load itself: `main.c:616` documents each Z80 data byte at
+  ~6-10 SH-2 cycles of UNCACHED SDRAM access. That load is unavoidable per access and dwarfs
+  the shift/page-compute work. Caching cannot remove it.
+- r7-r14 are pinned, callee-persistent Z80 state (header lines 9-17), so no register is free
+  to hold a persistent cache base across calls without refactoring the prologue save/restore
+  AND every handler that uses r5/r6 as scratch. A memory-backed key compare (~3 instrs: load
+  key + cmp/eq + branch) saves ~3 shifts → net flat, plus mispredict risk on misses.
+- Caching the DATA region instead would reintroduce the interpreter-code thrashing that
+  `main.c:612` (OD=1) already avoids — measured at +568 FRT ticks when disabled (line 620).
 
-FIX (page cache): keep a small table `last_base[topbyte]` + `last_top`, where
-`topbyte = addr>>8`. On load: compare top byte to cached; on hit skip all shifts
-and reuse the base pointer directly (2 extra instrs, no shifts, no table load).
-Invalidate only when mapping actually changes (`gg_map`, save-state restore) —
-writes to RAM/mapper do NOT change the backing buffer pointer, so reads stay valid.
-Expected: ~7 -> ~3-4 instructions on the common case; `mov.l` removed from hot path.
+Fix is not worth it; correctness risk on sound/input-critical code for no gain.
 
 ### #2 — Multi-byte read duplication (POP BC/DE, lines 1938+). [HIGH]
 Two full `_inline_gg_read` sequences are inlined per stack pop because a byte-pair
@@ -75,5 +76,9 @@ table; that trades code size for fewer branches and is a larger, riskier change.
   (PicoDrive / genesis-plus-gx) on hardware or an SH2 emulator. `sh-elf` toolchain and
   build artifacts are present, so *compile* checks pass, but behavior must be verified
   by loading real games (Z80 drives sound + inputs — wrong reads break them).
-- Recommended: implement #1 in isolation, compile with `make`, then verify a couple of
-  Z80-heavy titles under an emulator before wider changes.
+- Recommended: do NOT optimize #1 (rejected — net ≈ zero, see above). Instead MEASURE first
+  with the existing on-screen PERF_DEBUG instrumentation (t1 = Z80 visible ticks, t2 = blanking,
+  plus the opcode histogram at main.c:705) to confirm where time actually goes. The Z80 runs in
+  parallel with the slave renderer (main.c:561-571), so it likely has headroom and is NOT the
+  framerate limiter — if t1 is small vs the render-wait at main.c:651, target #3 instead. Verify
+  any Z80-core change under a real game before wider rollout (sound + inputs depend on reads).
