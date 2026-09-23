@@ -70,6 +70,10 @@ extern void render_sprites_line_asm(uint16_t *dst, const uint8_t *priority_buf,
                                     const uint8_t *sat, const uint16_t *pal,
                                     int clip_x_min, int clip_x_max,
                                     int shift_x, int pat_gen_idx);
+extern void gg_bg_decode(uint16_t idx);
+/* Decode a background tile row from live VRAM into the cache on an asm miss.
+ * Referenced by render_bg_line_asm via the gg_bg_decode symbol (no C caller). */
+
 
 static void (*fb_copy_fn)(volatile uint32_t *dst, const uint32_t *src);
 static int fb_copy_src_x;  /* line_buf index for copy start */
@@ -193,6 +197,49 @@ void gg_tile_dirty(uint16_t vram_addr)
         tile_dirty_bits[tile_n >> 3] |= (uint8_t)(1u << (tile_n & 7));
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* Background tile-row cache — Plan A fallback decode                  */
+/*                                                                     */
+/* Per-(tile_n,row) cache of pre-decoded hi/lo packed index words,      */
+/* indexed by idx = tile_n*8 + row in [0,4095] (== VRAM byte offset>>2).*/
+/* Kept separate from the sprite tile_cache: BG and sprites share the  */
+/* same [0,4095] index space but render in different orders, so a      */
+/* shared validity flag would let one clobber the other's decode state.*/
+/*                                                                     */
+/* bg_tile_state[idx]: 1 = clean (cached result valid),                 */
+/*                      0 = dirty (needs re-decode).                    */
+/* ------------------------------------------------------------------ */
+
+tile_cache_t bg_tile_cache[TILE_CACHE_ENTRIES] __attribute__((aligned(16)));
+uint8_t      bg_tile_state[TILE_CACHE_ENTRIES] __attribute__((aligned(16)));
+
+/* Decode one background tile row from live VRAM into bg_tile_cache[idx].
+ * Referenced by render_bg_line_asm on a cache miss (no C caller): the asm
+ * loop checks bg_tile_state[idx]; when dirty it jsr gg_bg_decode(idx) and
+ * then reads hi/lo from bg_tile_cache[idx].
+ *
+ * Contract (PLAN_A_BG_TILE_CACHE.md / render_asm.S column loop):
+ *   idx = tile_n*8 + row, where row already includes v_flip.
+ *   base = gg_vram + tile_n*32 + row*4  ==  gg_vram + (idx << 2).
+ * Reads the 4 bitplane bytes and ORs each through tile_lut_hi/lo[plane][bp*4],
+ * exactly as the asm column loop does, so cached hi/lo are bit-identical. */
+__attribute__((section(".sdram_code")))
+void gg_bg_decode(uint16_t idx)
+{
+    uint8_t  *base = gg_vram + ((uint32_t)idx << 2);
+
+    uint8_t bp0 = base[0], bp1 = base[1], bp2 = base[2], bp3 = base[3];
+
+    uint32_t hi = tile_lut_hi[0][bp0 * 4] | tile_lut_hi[1][bp1 * 4]
+                | tile_lut_hi[2][bp2 * 4] | tile_lut_hi[3][bp3 * 4];
+    uint32_t lo = tile_lut_lo[0][bp0 * 4] | tile_lut_lo[1][bp1 * 4]
+                | tile_lut_lo[2][bp2 * 4] | tile_lut_lo[3][bp3 * 4];
+
+    bg_tile_cache[idx].hi = hi;
+    bg_tile_cache[idx].lo = lo;
+}
+
 
 /* Called from gg_vdp_palette_write() when CRAM is written */
 __attribute__((section(".sdram_code")))
